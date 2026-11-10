@@ -2,8 +2,11 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Konfigurasi kompatibilitas Firebase JS SDK dengan Metro/Expo.
+// Kompatibilitas Firebase JS SDK
 config.resolver.sourceExts.push('cjs');
-config.resolver.unstable_enablePackageExports = false;
+
+// Gunakan package.json exports untuk resolusi modul React Native
+config.resolver.unstable_enablePackageExports = true;
 
 module.exports = config;
+
