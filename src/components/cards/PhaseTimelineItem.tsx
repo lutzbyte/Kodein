@@ -22,9 +22,7 @@ export function PhaseTimelineItem({ phase, completed, isLast, onPress }: PhaseTi
         {!isLast ? <View style={styles.line} /> : null}
       </View>
       <View style={[styles.texts, !isLast && styles.textsSpaced]}>
-        <AppText variant="bodyStrong">
-          Fase {phase.order} — {phase.title}
-        </AppText>
+        <AppText variant="bodyStrong">{phase.title}</AppText>
         <AppText variant="caption" color={colors.textSecondary}>
           Bahasa: {phase.languages.join(' / ')}
         </AppText>
