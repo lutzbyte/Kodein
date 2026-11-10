@@ -53,6 +53,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Validate Environment Secrets
+        run: |
+          test -n "$EXPO_PUBLIC_FIREBASE_API_KEY" || (echo "Missing Firebase API Key" && exit 1)
+          test -n "$EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN" || (echo "Missing Firebase Auth Domain" && exit 1)
+          test -n "$EXPO_PUBLIC_FIREBASE_PROJECT_ID" || (echo "Missing Firebase Project ID" && exit 1)
+          test -n "$EXPO_PUBLIC_FIREBASE_APP_ID" || (echo "Missing Firebase App ID" && exit 1)
+          test -n "$EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID" || (echo "Missing Google Web Client ID" && exit 1)
+
       - name: Install Dependencies
         run: bun install --frozen-lockfile
 
@@ -73,6 +81,8 @@ jobs:
 
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/kodein-release.jks
 
+          test -s android/app/kodein-release.jks || (echo "Keystore gagal dibuat." && exit 1)
+
           cat >> android/gradle.properties <<EOF
 
           MYAPP_UPLOAD_STORE_FILE=kodein-release.jks
@@ -86,113 +96,99 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
           import re
-          import sys
 
           path = Path("android/app/build.gradle")
-
-          if not path.exists():
-              sys.exit("android/app/build.gradle tidak ditemukan.")
-
           content = path.read_text()
 
-          # Cari blok buildTypes.
-          match = re.search(r'\bbuildTypes\s*\{', content)
-          if not match:
-              sys.exit("Blok buildTypes tidak ditemukan.")
-
-          def find_block_end(text, opening_brace):
+          def find_block_end(text, opening):
               depth = 0
-              for i in range(opening_brace, len(text)):
+              for i in range(opening, len(text)):
                   if text[i] == "{":
                       depth += 1
                   elif text[i] == "}":
                       depth -= 1
                       if depth == 0:
                           return i
-              return -1
+              raise RuntimeError("Blok Gradle tidak valid.")
 
-          build_types_open = content.find("{", match.start())
-          build_types_end = find_block_end(content, build_types_open)
+          # Temukan signingConfigs.
+          match = re.search(r'\bsigningConfigs\s*\{', content)
 
-          if build_types_end == -1:
-              sys.exit("Blok buildTypes tidak valid.")
+          if not match:
+              raise RuntimeError("Blok signingConfigs tidak ditemukan.")
 
-          build_types = content[build_types_open:build_types_end + 1]
-          release_match = re.search(r'\brelease\s*\{', build_types)
+          signing_open = content.find("{", match.start())
+          signing_close = find_block_end(content, signing_open)
 
-          if not release_match:
-              sys.exit("Blok buildTypes.release tidak ditemukan.")
+          signing_content = content[signing_open + 1:signing_close]
 
-          release_open = build_types.find("{", release_match.start())
-          release_end = find_block_end(build_types, release_open)
-
-          if release_end == -1:
-              sys.exit("Blok release tidak valid.")
-
-          release_block = build_types[release_open:release_end + 1]
-
-          # Pastikan signingConfigs.release tersedia.
-          signing_match = re.search(r'\bsigningConfigs\s*\{', content)
-
-          if not signing_match:
-              android_match = re.search(r'\bandroid\s*\{', content)
-              if not android_match:
-                  sys.exit("Blok android tidak ditemukan.")
-
-              android_open = content.find("{", android_match.start())
-              content = (
-                  content[:android_open + 1]
-                  + """
-              signingConfigs {
+          # Tambahkan signingConfigs.release jika belum ada.
+          if not re.search(r'\brelease\s*\{', signing_content):
+              release_config = """
                   release {
                       storeFile file(MYAPP_UPLOAD_STORE_FILE)
                       storePassword MYAPP_UPLOAD_STORE_PASSWORD
                       keyAlias MYAPP_UPLOAD_KEY_ALIAS
                       keyPassword MYAPP_UPLOAD_KEY_PASSWORD
                   }
-              }
-          """
-                  + content[android_open + 1:]
+              """
+
+              content = (
+                  content[:signing_close]
+                  + release_config
+                  + content[signing_close:]
               )
 
-              # Hitung ulang posisi blok setelah perubahan.
-              match = re.search(r'\bbuildTypes\s*\{', content)
-              build_types_open = content.find("{", match.start())
-              build_types_end = find_block_end(content, build_types_open)
-              build_types = content[build_types_open:build_types_end + 1]
-              release_match = re.search(r'\brelease\s*\{', build_types)
-              release_open = build_types.find("{", release_match.start())
-              release_end = find_block_end(build_types, release_open)
-              release_block = build_types[release_open:release_end + 1]
+          # Temukan ulang buildTypes setelah perubahan.
+          match = re.search(r'\bbuildTypes\s*\{', content)
 
-          # Pastikan konfigurasi release mengarah ke keystore release.
-          if re.search(r'\bsigningConfig\s+signingConfigs\.release\b', release_block):
-              print("Release signing sudah dikonfigurasi.")
-          elif re.search(r'\bsigningConfig\s+signingConfigs\.debug\b', release_block):
-              release_block = re.sub(
-                  r'\bsigningConfig\s+signingConfigs\.debug\b',
-                  'signingConfig signingConfigs.release',
-                  release_block,
-                  count=1
-              )
-          else:
-              release_block = release_block[:-1] + """
-                  signingConfig signingConfigs.release
-              }"""
+          if not match:
+              raise RuntimeError("Blok buildTypes tidak ditemukan.")
 
-          updated_build_types = (
-              build_types[:release_open]
-              + release_block
-              + build_types[release_end + 1:]
+          build_open = content.find("{", match.start())
+          build_close = find_block_end(content, build_open)
+
+          build_content = content[build_open + 1:build_close]
+
+          release_match = re.search(r'\brelease\s*\{', build_content)
+
+          if not release_match:
+              raise RuntimeError("Blok buildTypes.release tidak ditemukan.")
+
+          release_open = content.find(
+              "{",
+              build_open + 1 + release_match.start()
           )
 
+          release_close = find_block_end(content, release_open)
+
+          release_content = content[release_open + 1:release_close]
+
+          # Ganti signing debug menjadi signing release.
+          release_content = re.sub(
+              r'\bsigningConfig\s+signingConfigs\.debug\b',
+              'signingConfig signingConfigs.release',
+              release_content
+          )
+
+          # Tambahkan konfigurasi jika belum ada.
+          if not re.search(
+              r'\bsigningConfig\s+signingConfigs\.release\b',
+              release_content
+          ):
+              release_content = (
+                  "\n            signingConfig signingConfigs.release\n"
+                  + release_content
+              )
+
           content = (
-              content[:build_types_open]
-              + updated_build_types
-              + content[build_types_end + 1:]
+              content[:release_open + 1]
+              + release_content
+              + content[release_close:]
           )
 
           path.write_text(content)
+
           print("Release signing berhasil dikonfigurasi.")
           PY
 
@@ -202,10 +198,17 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease
 
-      - name: Show APK Information
+      - name: Verify APK
         run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "APK tidak ditemukan."
+            exit 1
+          fi
+
           echo "APK berhasil dibuat:"
-          ls -lh android/app/build/outputs/apk/release/app-release.apk
+          ls -lh "$APK"
 
       - name: Show Keystore Fingerprints
         env:
