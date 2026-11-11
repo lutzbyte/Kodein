@@ -22,7 +22,7 @@ export function getPhaseById(id: string | undefined): Phase | undefined {
 }
 
 export function findLesson(
-  lessonId: string | undefined,
+  lessonId: string | undefined | null,
 ): { lesson: LessonSummary; phase: Phase; index: number } | undefined {
   if (!lessonId) return undefined;
 
@@ -58,6 +58,10 @@ export function getProjectById(id: string | undefined): Project | undefined {
 
 export function getResourcesByPhase(phaseId: string): Resource[] {
   return resources.filter((resource) => resource.phaseIds.includes(phaseId));
+}
+
+export function getResourcesByLesson(lessonId: string): Resource[] {
+  return resources.filter((resource) => resource.lessonIds.includes(lessonId));
 }
 
 export function matchesLevel(level: PhaseLevel, filter: LevelFilter): boolean {

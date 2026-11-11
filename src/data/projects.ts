@@ -4,6 +4,8 @@ import { phase3Projects } from '@/data/miniProjects/phase3';
 import { phase4Projects } from '@/data/miniProjects/phase4';
 import { phase5Projects } from '@/data/miniProjects/phase5';
 import { phase6Projects } from '@/data/miniProjects/phase6';
+import { phase7Projects } from '@/data/miniProjects/phase7';
+import { phase8Projects } from '@/data/miniProjects/phase8';
 import type { Project } from '@/types/content';
 
 export const projects: Project[] = [
@@ -13,4 +15,6 @@ export const projects: Project[] = [
   ...phase4Projects,
   ...phase5Projects,
   ...phase6Projects,
+  ...phase7Projects,
+  ...phase8Projects,
 ];

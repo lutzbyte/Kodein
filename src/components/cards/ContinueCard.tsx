@@ -1,12 +1,14 @@
-import { Code, Play } from 'lucide-react-native';
+import { Play } from 'lucide-react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
+import { LanguageIcon } from '@/components/ui/LanguageIcon';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, spacing } from '@/constants/theme';
 
 interface ContinueCardProps {
+  language: string;
   phaseLabel: string;
   title: string;
   subtitle: string;
@@ -14,13 +16,18 @@ interface ContinueCardProps {
   onPress: () => void;
 }
 
-export function ContinueCard({ phaseLabel, title, subtitle, percent, onPress }: ContinueCardProps) {
+export function ContinueCard({
+  language,
+  phaseLabel,
+  title,
+  subtitle,
+  percent,
+  onPress,
+}: ContinueCardProps) {
   return (
     <Card onPress={onPress} accessibilityLabel={`Lanjut belajar: ${title}`}>
       <View style={styles.row}>
-        <View style={styles.tile}>
-          <Code color={colors.primary} size={26} strokeWidth={2.2} />
-        </View>
+        <LanguageIcon language={language} size={52} />
         <View style={styles.texts}>
           <AppText variant="label" color={colors.primary}>
             {phaseLabel}
@@ -53,14 +60,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-  },
-  tile: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.md,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   texts: {
     flex: 1,

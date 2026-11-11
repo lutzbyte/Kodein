@@ -1,22 +1,23 @@
 import { useRouter } from 'expo-router';
 import { Bookmark, History, Info, Settings, Star } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { MenuRow } from '@/components/cards/MenuRow';
 import { WaveBackdrop } from '@/components/illustrations/WaveBackdrop';
+import { AboutSheet } from '@/components/sheets/AboutSheet';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Screen } from '@/components/ui/Screen';
-import { APP_DESCRIPTION, APP_NAME } from '@/constants/app';
 import { colors, layout, radius, spacing } from '@/constants/theme';
 import { phases } from '@/data/phases';
 import { useAuth } from '@/hooks/useAuth';
+import { useDialog } from '@/hooks/useDialog';
 import { useProgress } from '@/hooks/useProgress';
 import { toAuthError } from '@/services/auth/authErrors';
-import { getAndroidPackage, getAppVersion } from '@/utils/appInfo';
+import { getAndroidPackage } from '@/utils/appInfo';
 import { getLearnerLevel } from '@/utils/level';
 import { getOverallProgress } from '@/utils/progress';
 
@@ -24,34 +25,38 @@ const ICON_COLOR = colors.textPrimary;
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const dialog = useDialog();
   const { user, signOut } = useAuth();
   const progress = useProgress();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [aboutVisible, setAboutVisible] = useState(false);
 
   const overall = useMemo(() => getOverallProgress(phases, progress), [progress]);
   const level = getLearnerLevel(overall);
 
-  const performSignOut = useCallback(async () => {
+  const confirmSignOut = useCallback(async () => {
+    const confirmed = await dialog.confirm({
+      title: 'Keluar dari akun?',
+      message: 'Progress belajarmu tetap tersimpan dan tersedia saat kamu masuk kembali.',
+      confirmLabel: 'Keluar',
+      cancelLabel: 'Batal',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+
     setIsSigningOut(true);
     try {
       // Setelah berhasil, guard di _layout.tsx otomatis memindahkan ke Onboarding.
       await signOut();
     } catch (error) {
       setIsSigningOut(false);
-      Alert.alert('Gagal keluar', toAuthError(error).message);
+      await dialog.alert({
+        title: 'Gagal keluar',
+        message: toAuthError(error).message,
+        tone: 'danger',
+      });
     }
-  }, [signOut]);
-
-  const confirmSignOut = useCallback(() => {
-    Alert.alert('Keluar dari akun?', 'Progress belajarmu tetap tersimpan dan tersedia saat kamu masuk kembali.', [
-      { text: 'Batal', style: 'cancel' },
-      { text: 'Keluar', style: 'destructive', onPress: performSignOut },
-    ]);
-  }, [performSignOut]);
-
-  const showAbout = useCallback(() => {
-    Alert.alert(`Tentang ${APP_NAME}`, `Versi ${getAppVersion()}\n\n${APP_DESCRIPTION}`);
-  }, []);
+  }, [dialog, signOut]);
 
   const rateApp = useCallback(async () => {
     const packageName = getAndroidPackage();
@@ -61,10 +66,13 @@ export default function ProfileScreen() {
       try {
         await Linking.openURL(`https://play.google.com/store/apps/details?id=${packageName}`);
       } catch {
-        Alert.alert('Tidak dapat membuka Play Store', 'Coba lagi nanti.');
+        await dialog.alert({
+          title: 'Tidak dapat membuka Play Store',
+          message: 'Coba lagi nanti.',
+        });
       }
     }
-  }, []);
+  }, [dialog]);
 
   return (
     <Screen edges={['top']}>
@@ -121,7 +129,7 @@ export default function ProfileScreen() {
           <MenuRow
             icon={<Info color={ICON_COLOR} size={22} strokeWidth={2} />}
             label="Tentang Aplikasi"
-            onPress={showAbout}
+            onPress={() => setAboutVisible(true)}
           />
           <MenuRow
             icon={<Star color={ICON_COLOR} size={22} strokeWidth={2} />}
@@ -133,6 +141,8 @@ export default function ProfileScreen() {
 
         <Button title="Keluar" variant="outline" loading={isSigningOut} onPress={confirmSignOut} />
       </ScrollView>
+
+      <AboutSheet visible={aboutVisible} onClose={() => setAboutVisible(false)} />
     </Screen>
   );
 }

@@ -11,7 +11,7 @@ import {
 import { AppText } from '@/components/ui/AppText';
 import { colors, radius } from '@/constants/theme';
 
-type ButtonVariant = 'primary' | 'outline' | 'ghost';
+type ButtonVariant = 'primary' | 'outline' | 'ghost' | 'danger';
 
 interface ButtonProps {
   title: string;
@@ -37,13 +37,9 @@ export function Button({
   style,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  const solid = variant === 'primary' || variant === 'danger';
 
-  const textColor =
-    variant === 'primary'
-      ? colors.surface
-      : onDark
-        ? colors.dark.text
-        : colors.primary;
+  const textColor = solid ? colors.surface : onDark ? colors.dark.text : colors.primary;
 
   return (
     <Pressable
@@ -54,6 +50,7 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         variant === 'primary' && styles.primary,
+        variant === 'danger' && styles.danger,
         variant === 'outline' && styles.outline,
         isDisabled && !loading && styles.disabled,
         pressed && styles.pressed,
@@ -84,6 +81,9 @@ const styles = StyleSheet.create({
   },
   primary: {
     backgroundColor: colors.primary,
+  },
+  danger: {
+    backgroundColor: colors.danger,
   },
   outline: {
     borderWidth: 1.5,

@@ -1,17 +1,24 @@
 import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
+import {
   BookOpen,
+  Bookmark,
   CirclePlay,
   ExternalLink,
   FileText,
   GraduationCap,
   type LucideIcon,
 } from 'lucide-react-native';
-import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { Badge, getDifficultyTone } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { colors, radius, spacing } from '@/constants/theme';
+import { useBookmarks } from '@/hooks/useBookmarks';
 import type { Resource, ResourceType } from '@/types/content';
 
 const TYPE_ICONS: Record<ResourceType, LucideIcon> = {
@@ -29,6 +36,9 @@ interface ResourceCardProps {
 
 export function ResourceCard({ resource, onPress }: ResourceCardProps) {
   const Icon = TYPE_ICONS[resource.type];
+  const { isBookmarked, isPending, toggleResource } = useBookmarks();
+  const bookmarked = isBookmarked(resource.id);
+  const pending = isPending(resource.id);
 
   return (
     <Card onPress={onPress} accessibilityLabel={`Buka ${resource.title}`}>
@@ -48,7 +58,28 @@ export function ResourceCard({ resource, onPress }: ResourceCardProps) {
             <Badge label={resource.difficulty} tone={getDifficultyTone(resource.difficulty)} />
           </View>
         </View>
-        <ExternalLink color={colors.textMuted} size={18} strokeWidth={2.2} />
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={bookmarked ? 'Hapus bookmark' : 'Simpan bookmark'}
+            hitSlop={10}
+            disabled={pending}
+            onPress={() => toggleResource(resource.id)}
+            style={styles.bookmark}
+          >
+            {pending ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Bookmark
+                color={bookmarked ? colors.primary : colors.textMuted}
+                fill={bookmarked ? colors.primary : 'transparent'}
+                size={20}
+                strokeWidth={2.2}
+              />
+            )}
+          </Pressable>
+          <ExternalLink color={colors.textMuted} size={16} strokeWidth={2.2} />
+        </View>
       </View>
     </Card>
   );
@@ -76,5 +107,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: 6,
+  },
+  actions: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    paddingVertical: 2,
+  },
+  bookmark: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -4,6 +4,8 @@ import { phase3Lessons } from '@/data/lessons/phase3';
 import { phase4Lessons } from '@/data/lessons/phase4';
 import { phase5Lessons } from '@/data/lessons/phase5';
 import { phase6Lessons } from '@/data/lessons/phase6';
+import { phase7Lessons } from '@/data/lessons/phase7';
+import { phase8Lessons } from '@/data/lessons/phase8';
 import type { LessonContent } from '@/types/content';
 
 const allLessons: LessonContent[] = [
@@ -13,6 +15,8 @@ const allLessons: LessonContent[] = [
   ...phase4Lessons,
   ...phase5Lessons,
   ...phase6Lessons,
+  ...phase7Lessons,
+  ...phase8Lessons,
 ];
 
 export const lessonContents: Record<string, LessonContent> = Object.fromEntries(

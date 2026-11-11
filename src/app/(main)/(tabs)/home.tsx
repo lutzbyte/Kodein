@@ -44,10 +44,7 @@ export default function HomeScreen() {
 
   return (
     <Screen edges={['top']}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerText}>
             <AppText variant="title">Halo, {firstName}!</AppText>
@@ -71,6 +68,7 @@ export default function HomeScreen() {
             onActionPress={() => router.push('/roadmap')}
           />
           <ContinueCard
+            language={continueTarget.phase.languages[0]}
             phaseLabel={`Fase ${continueTarget.phase.order} • ${continueTarget.phase.level}`}
             title={continueTarget.lesson.title}
             subtitle={

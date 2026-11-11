@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
+import { LanguageIcon } from '@/components/ui/LanguageIcon';
 import { colors, fontMono, radius } from '@/constants/theme';
 
 type TokenKind = 'plain' | 'keyword' | 'string' | 'number' | 'comment' | 'directive' | 'function';
@@ -10,11 +11,62 @@ interface Token {
   kind: TokenKind;
 }
 
-const KEYWORDS = new Set([
-  'int', 'char', 'float', 'double', 'void', 'return', 'if', 'else', 'for', 'while', 'do',
-  'switch', 'case', 'break', 'continue', 'struct', 'enum', 'typedef', 'const', 'unsigned',
-  'long', 'short', 'static', 'sizeof', 'class', 'public', 'private', 'new', 'delete',
+interface LanguageConfig {
+  keywords: ReadonlySet<string>;
+  lineComment: '//' | '#';
+  directives: boolean;
+}
+
+const C_KEYWORDS = new Set([
+  'int', 'char', 'float', 'double', 'void', 'long', 'short', 'unsigned', 'signed', 'bool',
+  'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default', 'break',
+  'continue', 'struct', 'enum', 'typedef', 'const', 'static', 'sizeof', 'volatile',
+  'class', 'public', 'private', 'protected', 'new', 'delete', 'namespace', 'using',
+  'template', 'typename', 'virtual', 'override', 'nullptr', 'true', 'false', 'auto',
+  'explicit', 'this', 'try', 'catch', 'throw',
 ]);
+
+const JAVA_KEYWORDS = new Set([
+  'public', 'private', 'protected', 'class', 'static', 'final', 'void', 'int', 'long',
+  'double', 'boolean', 'char', 'new', 'return', 'if', 'else', 'for', 'while', 'extends',
+  'implements', 'interface', 'abstract', 'throw', 'throws', 'try', 'catch', 'import',
+  'package', 'this', 'super', 'true', 'false', 'null', 'instanceof',
+]);
+
+const PYTHON_KEYWORDS = new Set([
+  'def', 'class', 'return', 'if', 'elif', 'else', 'for', 'while', 'in', 'not', 'and', 'or',
+  'is', 'import', 'from', 'as', 'with', 'try', 'except', 'raise', 'lambda', 'None', 'True',
+  'False', 'pass', 'break', 'continue', 'yield', 'global', 'finally',
+]);
+
+const SHELL_KEYWORDS = new Set([
+  'if', 'then', 'else', 'fi', 'for', 'do', 'done', 'while', 'case', 'esac', 'in',
+  'echo', 'cd', 'git', 'mkdir', 'rm',
+]);
+
+const C_LIKE: LanguageConfig = { keywords: C_KEYWORDS, lineComment: '//', directives: true };
+const JAVA: LanguageConfig = { keywords: JAVA_KEYWORDS, lineComment: '//', directives: false };
+const PYTHON: LanguageConfig = { keywords: PYTHON_KEYWORDS, lineComment: '#', directives: false };
+const SHELL: LanguageConfig = { keywords: SHELL_KEYWORDS, lineComment: '#', directives: false };
+const GENERIC: LanguageConfig = { keywords: C_KEYWORDS, lineComment: '//', directives: false };
+
+function getLanguageConfig(language: string): LanguageConfig {
+  switch (language.toLowerCase()) {
+    case 'c':
+    case 'c++':
+    case 'cpp':
+      return C_LIKE;
+    case 'java':
+      return JAVA;
+    case 'python':
+      return PYTHON;
+    case 'shell':
+    case 'bash':
+      return SHELL;
+    default:
+      return GENERIC;
+  }
+}
 
 const TOKEN_COLORS: Record<TokenKind, string> = {
   plain: colors.code.text,
@@ -27,23 +79,50 @@ const TOKEN_COLORS: Record<TokenKind, string> = {
 };
 
 const INCLUDE_PATTERN = /^(\s*#\s*include)(\s*)(<[^>]*>|"[^"]*")(.*)$/;
-const TOKEN_PATTERN =
-  /(\/\/.*$)|("(?:[^"\\]|\\.)*")|(#\s*\w+)|(\b\d+(?:\.\d+)?\b)|(\b[A-Za-z_]\w*(?=\s*\())|(\b[A-Za-z_]\w*\b)|(\s+)|([\s\S])/g;
+const STRING_PART = String.raw`("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')`;
 
-function tokenizeLine(line: string): Token[] {
-  const include = INCLUDE_PATTERN.exec(line);
-  if (include) {
-    const tokens: Token[] = [
-      { text: include[1], kind: 'directive' },
-      { text: include[2], kind: 'plain' },
-      { text: include[3], kind: 'string' },
-    ];
-    if (include[4]) tokens.push({ text: include[4], kind: 'plain' });
-    return tokens;
+const patternCache = new Map<string, RegExp>();
+
+function getPattern(config: LanguageConfig): RegExp {
+  const key = `${config.lineComment}-${config.directives}`;
+  const cached = patternCache.get(key);
+  if (cached) return cached;
+
+  const comment = config.lineComment === '#' ? String.raw`(#.*$)` : String.raw`(\/\/.*$)`;
+  const directive = config.directives ? String.raw`(#\s*\w+)` : '((?!))';
+  const pattern = new RegExp(
+    [
+      comment,
+      STRING_PART,
+      directive,
+      String.raw`(\b\d+(?:\.\d+)?\b)`,
+      String.raw`(\b[A-Za-z_]\w*(?=\s*\())`,
+      String.raw`(\b[A-Za-z_]\w*\b)`,
+      String.raw`(\s+)`,
+      String.raw`([\s\S])`,
+    ].join('|'),
+    'g',
+  );
+  patternCache.set(key, pattern);
+  return pattern;
+}
+
+function tokenizeLine(line: string, config: LanguageConfig): Token[] {
+  if (config.directives) {
+    const include = INCLUDE_PATTERN.exec(line);
+    if (include) {
+      const tokens: Token[] = [
+        { text: include[1], kind: 'directive' },
+        { text: include[2], kind: 'plain' },
+        { text: include[3], kind: 'string' },
+      ];
+      if (include[4]) tokens.push({ text: include[4], kind: 'plain' });
+      return tokens;
+    }
   }
 
   const tokens: Token[] = [];
-  for (const match of line.matchAll(TOKEN_PATTERN)) {
+  for (const match of line.matchAll(getPattern(config))) {
     const text = match[0];
     const comment = match[1];
     const stringLiteral = match[2];
@@ -57,8 +136,8 @@ function tokenizeLine(line: string): Token[] {
     else if (stringLiteral) kind = 'string';
     else if (directive) kind = 'directive';
     else if (numberLiteral) kind = 'number';
-    else if (callName) kind = KEYWORDS.has(callName) ? 'keyword' : 'function';
-    else if (identifier) kind = KEYWORDS.has(identifier) ? 'keyword' : 'plain';
+    else if (callName) kind = config.keywords.has(callName) ? 'keyword' : 'function';
+    else if (identifier) kind = config.keywords.has(identifier) ? 'keyword' : 'plain';
 
     tokens.push({ text, kind });
   }
@@ -67,12 +146,14 @@ function tokenizeLine(line: string): Token[] {
 
 interface CodeBlockProps {
   code: string;
+  /** Tanpa language, teks ditampilkan polos (cocok untuk output program). */
   language?: string;
   title?: string;
 }
 
 export function CodeBlock({ code, language, title }: CodeBlockProps) {
   const lines = code.replace(/\n$/, '').split('\n');
+  const config = language ? getLanguageConfig(language) : null;
 
   return (
     <View style={styles.container}>
@@ -82,8 +163,9 @@ export function CodeBlock({ code, language, title }: CodeBlockProps) {
             {title ?? ''}
           </AppText>
           {language ? (
-            <View style={styles.languageBadge}>
-              <AppText variant="label" color={colors.surface}>
+            <View style={styles.languageRow}>
+              <LanguageIcon language={language} size={24} tone="dark" />
+              <AppText variant="label" color={colors.code.text}>
                 {language}
               </AppText>
             </View>
@@ -99,11 +181,13 @@ export function CodeBlock({ code, language, title }: CodeBlockProps) {
               <Text style={styles.code}>
                 {line.length === 0
                   ? ' '
-                  : tokenizeLine(line).map((token, tokenIndex) => (
-                      <Text key={tokenIndex} style={{ color: TOKEN_COLORS[token.kind] }}>
-                        {token.text}
-                      </Text>
-                    ))}
+                  : config
+                    ? tokenizeLine(line, config).map((token, tokenIndex) => (
+                        <Text key={tokenIndex} style={{ color: TOKEN_COLORS[token.kind] }}>
+                          {token.text}
+                        </Text>
+                      ))
+                    : line}
               </Text>
             </View>
           ))}
@@ -126,11 +210,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  languageBadge: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  languageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   line: {
     flexDirection: 'row',

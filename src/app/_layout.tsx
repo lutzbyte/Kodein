@@ -13,6 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/hooks/useAuth';
 import { AuthProvider } from '@/store/AuthContext';
+import { DialogProvider } from '@/store/DialogContext';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -41,7 +42,6 @@ function RootNavigator() {
         <Stack.Screen name="onboarding" />
       </Stack.Protected>
 
-      {/* Seluruh halaman aplikasi berada di grup (main) dan hanya bisa dibuka setelah login. */}
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="(main)" />
       </Stack.Protected>
@@ -69,10 +69,12 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <StatusBar style="auto" />
-        <RootNavigator />
-      </AuthProvider>
+      <DialogProvider>
+        <AuthProvider>
+          <StatusBar style="auto" />
+          <RootNavigator />
+        </AuthProvider>
+      </DialogProvider>
     </SafeAreaProvider>
   );
 }

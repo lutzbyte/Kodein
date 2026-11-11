@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BookOpen, Search, Target } from 'lucide-react-native';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { ResourceCard } from '@/components/cards/ResourceCard';
 import { AppText } from '@/components/ui/AppText';
 import { AccordionItem } from '@/components/ui/AccordionItem';
 import { Button } from '@/components/ui/Button';
@@ -11,7 +12,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Screen } from '@/components/ui/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { colors, layout, radius, spacing } from '@/constants/theme';
-import { findLesson, getLessonContent } from '@/utils/content';
+import { useOpenResource } from '@/hooks/useOpenResource';
+import { findLesson, getLessonContent, getResourcesByLesson } from '@/utils/content';
 
 function BulletList({ items }: { items: string[] }) {
   return (
@@ -31,6 +33,7 @@ function BulletList({ items }: { items: string[] }) {
 export default function LessonDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const openResource = useOpenResource();
 
   const found = findLesson(id);
 
@@ -49,6 +52,7 @@ export default function LessonDetailScreen() {
 
   const { lesson, phase, index } = found;
   const content = getLessonContent(lesson.id);
+  const relatedResources = getResourcesByLesson(lesson.id);
   const previous = index > 0 ? phase.lessons[index - 1] : undefined;
   const next = index < phase.lessons.length - 1 ? phase.lessons[index + 1] : undefined;
 
@@ -129,9 +133,22 @@ export default function LessonDetailScreen() {
           <EmptyState
             icon={<BookOpen color={colors.primary} size={30} strokeWidth={2} />}
             title="Materi sedang disusun"
-            description="Penjelasan lengkap, contoh kode, dan catatan untuk materi ini ditambahkan pada Fase 3."
+            description="Penjelasan lengkap untuk materi ini belum tersedia."
           />
         )}
+
+        {relatedResources.length > 0 ? (
+          <View style={styles.block}>
+            <AppText variant="heading">Resource Terkait</AppText>
+            {relatedResources.map((resource) => (
+              <ResourceCard
+                key={resource.id}
+                resource={resource}
+                onPress={() => openResource(resource)}
+              />
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.footer}>

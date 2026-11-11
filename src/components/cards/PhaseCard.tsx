@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
+import { LanguageIcon } from '@/components/ui/LanguageIcon';
 import { NumberBadge } from '@/components/ui/NumberBadge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { colors, spacing } from '@/constants/theme';
@@ -25,9 +26,14 @@ export function PhaseCard({ phase, summary, statusLabel, onPress }: PhaseCardPro
         <NumberBadge value={phase.order} completed={completed} size={36} />
         <View style={styles.texts}>
           <AppText variant="bodyStrong">{phase.title}</AppText>
-          <AppText variant="caption" color={colors.textSecondary}>
-            Bahasa: {phase.languages.join(' / ')}
-          </AppText>
+          <View style={styles.languages}>
+            {phase.languages.slice(0, 4).map((language) => (
+              <LanguageIcon key={language} language={language} size={20} />
+            ))}
+            <AppText variant="caption" color={colors.textSecondary} style={styles.languageText}>
+              {phase.languages.join(' / ')}
+            </AppText>
+          </View>
           <AppText variant="caption" color={colors.textSecondary}>
             {phase.estimatedTime}
           </AppText>
@@ -58,7 +64,16 @@ const styles = StyleSheet.create({
   },
   texts: {
     flex: 1,
-    gap: 2,
+    gap: 4,
+  },
+  languages: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  languageText: {
+    flexShrink: 1,
+    marginLeft: 2,
   },
   progress: {
     marginTop: spacing.md,
