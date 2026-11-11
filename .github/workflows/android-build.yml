@@ -1,15 +1,17 @@
-name: Kodein Android Build
+name: Kodein Android Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: kodein-android-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-android:
@@ -26,6 +28,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -111,7 +115,6 @@ jobs:
                           return i
               raise RuntimeError("Blok Gradle tidak valid.")
 
-          # Temukan signingConfigs.
           match = re.search(r'\bsigningConfigs\s*\{', content)
 
           if not match:
@@ -119,10 +122,8 @@ jobs:
 
           signing_open = content.find("{", match.start())
           signing_close = find_block_end(content, signing_open)
-
           signing_content = content[signing_open + 1:signing_close]
 
-          # Tambahkan signingConfigs.release jika belum ada.
           if not re.search(r'\brelease\s*\{', signing_content):
               release_config = """
                   release {
@@ -132,14 +133,8 @@ jobs:
                       keyPassword MYAPP_UPLOAD_KEY_PASSWORD
                   }
               """
+              content = content[:signing_close] + release_config + content[signing_close:]
 
-              content = (
-                  content[:signing_close]
-                  + release_config
-                  + content[signing_close:]
-              )
-
-          # Temukan ulang buildTypes setelah perubahan.
           match = re.search(r'\bbuildTypes\s*\{', content)
 
           if not match:
@@ -147,46 +142,26 @@ jobs:
 
           build_open = content.find("{", match.start())
           build_close = find_block_end(content, build_open)
-
           build_content = content[build_open + 1:build_close]
-
           release_match = re.search(r'\brelease\s*\{', build_content)
 
           if not release_match:
               raise RuntimeError("Blok buildTypes.release tidak ditemukan.")
 
-          release_open = content.find(
-              "{",
-              build_open + 1 + release_match.start()
-          )
-
+          release_open = content.find("{", build_open + 1 + release_match.start())
           release_close = find_block_end(content, release_open)
-
           release_content = content[release_open + 1:release_close]
 
-          # Ganti signing debug menjadi signing release.
           release_content = re.sub(
               r'\bsigningConfig\s+signingConfigs\.debug\b',
               'signingConfig signingConfigs.release',
               release_content
           )
 
-          # Tambahkan konfigurasi jika belum ada.
-          if not re.search(
-              r'\bsigningConfig\s+signingConfigs\.release\b',
-              release_content
-          ):
-              release_content = (
-                  "\n            signingConfig signingConfigs.release\n"
-                  + release_content
-              )
+          if not re.search(r'\bsigningConfig\s+signingConfigs\.release\b', release_content):
+              release_content = "\n            signingConfig signingConfigs.release\n" + release_content
 
-          content = (
-              content[:release_open + 1]
-              + release_content
-              + content[release_close:]
-          )
-
+          content = content[:release_open + 1] + release_content + content[release_close:]
           path.write_text(content)
 
           print("Release signing berhasil dikonfigurasi.")
@@ -229,11 +204,102 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Generate Changelog
+        if: startsWith(github.ref, 'refs/tags/')
+        id: changelog
+        shell: bash
+        run: |
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+
+          PREVIOUS_TAG=$(git tag --sort=-version:refname \
+            | grep -Fxv "$CURRENT_TAG" \
+            | head -n 1 || true)
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log "$PREVIOUS_TAG..$CURRENT_TAG" \
+              --pretty=format:"%s" --no-merges)
+          else
+            COMMITS=$(git log "$CURRENT_TAG" \
+              --pretty=format:"%s" --no-merges)
+          fi
+
+          FEATURES=""
+          FIXES=""
+          IMPROVEMENTS=""
+          UI=""
+          OTHER=""
+
+          while IFS= read -r message; do
+            [ -z "$message" ] && continue
+
+            case "$message" in
+              feat:*|feature:*)
+                FEATURES="${FEATURES}- ${message#*: }"$'\n'
+                ;;
+              fix:*|bugfix:*)
+                FIXES="${FIXES}- ${message#*: }"$'\n'
+                ;;
+              perf:*|improve:*)
+                IMPROVEMENTS="${IMPROVEMENTS}- ${message#*: }"$'\n'
+                ;;
+              ui:*|design:*)
+                UI="${UI}- ${message#*: }"$'\n'
+                ;;
+              *)
+                OTHER="${OTHER}- ${message}"$'\n'
+                ;;
+            esac
+          done <<< "$COMMITS"
+
+          {
+            echo "## What's New in Kodein ${CURRENT_TAG}"
+            echo
+            echo "Terima kasih telah menggunakan Kodein! Berikut perubahan pada versi ini."
+            echo
+
+            if [ -n "$FEATURES" ]; then
+              echo "### ✨ New Features"
+              printf '%s' "$FEATURES"
+              echo
+            fi
+
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Bug Fixes"
+              printf '%s' "$FIXES"
+              echo
+            fi
+
+            if [ -n "$IMPROVEMENTS" ]; then
+              echo "### ⚡ Improvements"
+              printf '%s' "$IMPROVEMENTS"
+              echo
+            fi
+
+            if [ -n "$UI" ]; then
+              echo "### 🎨 UI/UX Updates"
+              printf '%s' "$UI"
+              echo
+            fi
+
+            if [ -n "$OTHER" ]; then
+              echo "### 🔧 Other Changes"
+              printf '%s' "$OTHER"
+              echo
+            fi
+
+            echo "### 📦 Download"
+            echo "Download APK melalui file \`app-release.apk\` di bawah."
+          } > release-notes.md
+
+          cat release-notes.md
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Kodein ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: release-notes.md
           files: android/app/build/outputs/apk/release/app-release.apk
+          draft: false
+          prerelease: false
