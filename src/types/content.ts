@@ -50,21 +50,41 @@ export interface LessonContent {
   notes: string[];
 }
 
-export type ExerciseKind = 'multiple-choice' | 'true-false' | 'predict-output';
+export type ChoiceExerciseKind =
+  | 'multiple-choice'
+  | 'true-false'
+  | 'predict-output'
+  | 'debugging';
 
-export interface Exercise {
+export type ExerciseKind = ChoiceExerciseKind | 'problem-solving';
+
+interface ExerciseBase {
   id: string;
   phaseId: string;
   title: string;
-  kind: ExerciseKind;
   difficulty: Difficulty;
   durationMinutes: number;
   question: string;
   code?: string;
-  options: string[];
-  correctIndex: number;
+  /** Bahasa untuk penyorotan kode. Bawaan: C. */
+  language?: string;
   explanation: string;
 }
+
+export interface ChoiceExercise extends ExerciseBase {
+  kind: ChoiceExerciseKind;
+  options: string[];
+  correctIndex: number;
+}
+
+export interface ProblemExercise extends ExerciseBase {
+  kind: 'problem-solving';
+  /** Jawaban yang diterima, dibandingkan tanpa memperhatikan huruf besar-kecil dan spasi. */
+  acceptedAnswers: string[];
+  hint?: string;
+}
+
+export type Exercise = ChoiceExercise | ProblemExercise;
 
 export interface Project {
   id: string;

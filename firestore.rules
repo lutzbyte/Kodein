@@ -7,29 +7,99 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    function validExerciseResult(data, exerciseId) {
+      return data.keys().hasOnly([
+          'exerciseId', 'phaseId', 'difficulty', 'attempts', 'solved',
+          'points', 'lastAnswer', 'lastCorrect', 'updatedAt'
+        ])
+        && data.exerciseId == exerciseId
+        && data.phaseId is string
+        && data.difficulty in ['Easy', 'Medium', 'Hard']
+        && data.attempts is int && data.attempts >= 1
+        && data.solved is bool
+        && data.points is int && data.points >= 0 && data.points <= 30
+        && data.lastAnswer is string && data.lastAnswer.size() <= 300
+        && data.lastCorrect is bool
+        && data.updatedAt == request.time;
+    }
+
     match /users/{uid} {
       allow read: if isOwner(uid);
 
       allow create: if isOwner(uid)
         && request.resource.data.keys().hasOnly(
-          ['uid', 'displayName', 'email', 'photoURL', 'level', 'createdAt']
+          ['uid', 'displayName', 'email', 'photoURL', 'level', 'createdAt', 'lastLoginAt']
         )
         && request.resource.data.uid == uid
         && request.resource.data.level == 1
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.lastLoginAt == request.time;
 
       allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(
+          ['uid', 'displayName', 'email', 'photoURL', 'level', 'createdAt', 'lastLoginAt']
+        )
         && request.resource.data.uid == resource.data.uid
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.level == resource.data.level
+        && request.resource.data.lastLoginAt == request.time;
 
       allow delete: if false;
 
-      // progress, bookmarks, history, exerciseResults, projectProgress, dan seterusnya
-      match /{subcollection}/{docId=**} {
+      match /progress/{lessonId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.lessonId == lessonId
+          && request.resource.data.phaseId is string
+          && request.resource.data.status in ['in_progress', 'completed']
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if false;
+      }
+
+      match /history/{entryId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.phaseId is string
+          && request.resource.data.createdAt == request.time
+          && (
+            (request.resource.data.type in ['lesson_started', 'lesson_completed']
+              && request.resource.data.lessonId is string)
+            || (request.resource.data.type == 'exercise_submitted'
+              && request.resource.data.exerciseId is string
+              && request.resource.data.correct is bool)
+          );
+        allow update, delete: if false;
+      }
+
+      match /bookmarks/{bookmarkId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.kind in ['resource', 'lesson']
+          && request.resource.data.targetId is string
+          && request.resource.data.createdAt == request.time;
+        allow delete: if isOwner(uid);
+        allow update: if false;
+      }
+
+      match /exerciseResults/{exerciseId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && validExerciseResult(request.resource.data, exerciseId)
+          && request.resource.data.attempts == 1;
+        allow update: if isOwner(uid)
+          && validExerciseResult(request.resource.data, exerciseId)
+          && request.resource.data.attempts == resource.data.attempts + 1
+          && (!resource.data.solved || request.resource.data.solved);
+        allow delete: if false;
+      }
+
+      // Diperketat pada Fase 7.
+      match /projectProgress/{projectId} {
         allow read, write: if isOwner(uid);
       }
     }
 
+    // Semua jalur lain ditolak.
     match /{document=**} {
       allow read, write: if false;
     }

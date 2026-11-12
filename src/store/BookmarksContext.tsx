@@ -11,21 +11,28 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useDialog } from '@/hooks/useDialog';
 import {
-  addResourceBookmark,
-  removeResourceBookmark,
-  subscribeToResourceBookmarks,
+  addBookmark,
+  removeBookmark,
+  subscribeToBookmarks,
+  type BookmarkKind,
 } from '@/services/firestore/bookmarkService';
 
 export interface BookmarksContextValue {
   resourceIds: ReadonlySet<string>;
+  lessonIds: ReadonlySet<string>;
   isLoading: boolean;
   error: string | null;
   isBookmarked: (resourceId: string) => boolean;
   isPending: (resourceId: string) => boolean;
   toggleResource: (resourceId: string) => Promise<void>;
+  isLessonBookmarked: (lessonId: string) => boolean;
+  isLessonPending: (lessonId: string) => boolean;
+  toggleLesson: (lessonId: string) => Promise<void>;
 }
 
 export const BookmarksContext = createContext<BookmarksContextValue | null>(null);
+
+const pendingKey = (kind: BookmarkKind, id: string) => `${kind}:${id}`;
 
 export function BookmarksProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -33,16 +40,18 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
   const uid = user?.uid ?? null;
 
   const [resourceIds, setResourceIds] = useState<ReadonlySet<string>>(new Set());
-  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
+  const [lessonIds, setLessonIds] = useState<ReadonlySet<string>>(new Set());
+  const [pendingKeys, setPendingKeys] = useState<ReadonlySet<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const latestIds = useRef(resourceIds);
-  latestIds.current = resourceIds;
+  const latest = useRef({ resourceIds, lessonIds });
+  latest.current = { resourceIds, lessonIds };
 
   useEffect(() => {
     if (!uid) {
       setResourceIds(new Set());
+      setLessonIds(new Set());
       setIsLoading(false);
       return;
     }
@@ -50,10 +59,11 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
 
-    return subscribeToResourceBookmarks(
+    return subscribeToBookmarks(
       uid,
-      (ids) => {
-        setResourceIds(new Set(ids));
+      (bookmarks) => {
+        setResourceIds(new Set(bookmarks.resourceIds));
+        setLessonIds(new Set(bookmarks.lessonIds));
         setIsLoading(false);
       },
       () => {
@@ -63,17 +73,20 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
     );
   }, [uid]);
 
-  const toggleResource = useCallback(
-    async (resourceId: string) => {
+  const toggle = useCallback(
+    async (kind: BookmarkKind, targetId: string) => {
       if (!uid) return;
 
-      setPendingIds((previous) => new Set(previous).add(resourceId));
+      const key = pendingKey(kind, targetId);
+      const current = kind === 'resource' ? latest.current.resourceIds : latest.current.lessonIds;
+
+      setPendingKeys((previous) => new Set(previous).add(key));
       try {
         // Selesai hanya setelah Firestore mengonfirmasi penulisan.
-        if (latestIds.current.has(resourceId)) {
-          await removeResourceBookmark(uid, resourceId);
+        if (current.has(targetId)) {
+          await removeBookmark(uid, kind, targetId);
         } else {
-          await addResourceBookmark(uid, resourceId);
+          await addBookmark(uid, kind, targetId);
         }
       } catch {
         await dialog.alert({
@@ -82,9 +95,9 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
           tone: 'danger',
         });
       } finally {
-        setPendingIds((previous) => {
+        setPendingKeys((previous) => {
           const next = new Set(previous);
-          next.delete(resourceId);
+          next.delete(key);
           return next;
         });
       }
@@ -95,13 +108,17 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
   const value = useMemo<BookmarksContextValue>(
     () => ({
       resourceIds,
+      lessonIds,
       isLoading,
       error,
       isBookmarked: (resourceId) => resourceIds.has(resourceId),
-      isPending: (resourceId) => pendingIds.has(resourceId),
-      toggleResource,
+      isPending: (resourceId) => pendingKeys.has(pendingKey('resource', resourceId)),
+      toggleResource: (resourceId) => toggle('resource', resourceId),
+      isLessonBookmarked: (lessonId) => lessonIds.has(lessonId),
+      isLessonPending: (lessonId) => pendingKeys.has(pendingKey('lesson', lessonId)),
+      toggleLesson: (lessonId) => toggle('lesson', lessonId),
     }),
-    [resourceIds, pendingIds, isLoading, error, toggleResource],
+    [resourceIds, lessonIds, pendingKeys, isLoading, error, toggle],
   );
 
   return <BookmarksContext.Provider value={value}>{children}</BookmarksContext.Provider>;

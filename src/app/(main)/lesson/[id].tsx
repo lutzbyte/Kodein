@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { BookOpen, Search, Target } from 'lucide-react-native';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { BookOpen, Bookmark, Search, Target } from 'lucide-react-native';
 
 import { ResourceCard } from '@/components/cards/ResourceCard';
 import { AppText } from '@/components/ui/AppText';
@@ -12,7 +13,10 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Screen } from '@/components/ui/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { colors, layout, radius, spacing } from '@/constants/theme';
+import { useBookmarks } from '@/hooks/useBookmarks';
+import { useLearningActions } from '@/hooks/useLearningActions';
 import { useOpenResource } from '@/hooks/useOpenResource';
+import { useProgress } from '@/hooks/useProgress';
 import { findLesson, getLessonContent, getResourcesByLesson } from '@/utils/content';
 
 function BulletList({ items }: { items: string[] }) {
@@ -34,8 +38,20 @@ export default function LessonDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const openResource = useOpenResource();
+  const progress = useProgress();
+  const { startLesson, completeLesson, reopenLesson, isPending } = useLearningActions();
+  const { isLessonBookmarked, isLessonPending, toggleLesson } = useBookmarks();
 
   const found = findLesson(id);
+  const lessonId = found?.lesson.id;
+  const phaseId = found?.phase.id;
+
+  // Membuka materi = mulai dipelajari. Menunggu data progress siap agar status
+  // materi yang sudah selesai tidak tertimpa.
+  useEffect(() => {
+    if (progress.isLoading || !lessonId || !phaseId) return;
+    startLesson(lessonId, phaseId);
+  }, [progress.isLoading, lessonId, phaseId, startLesson]);
 
   if (!found) {
     return (
@@ -56,9 +72,36 @@ export default function LessonDetailScreen() {
   const previous = index > 0 ? phase.lessons[index - 1] : undefined;
   const next = index < phase.lessons.length - 1 ? phase.lessons[index + 1] : undefined;
 
+  const completed = progress.completedLessonIds.has(lesson.id);
+  const saving = isPending(lesson.id);
+  const bookmarked = isLessonBookmarked(lesson.id);
+  const bookmarkPending = isLessonPending(lesson.id);
+
+  const bookmarkButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={bookmarked ? 'Hapus bookmark materi' : 'Simpan materi ke bookmark'}
+      hitSlop={12}
+      disabled={bookmarkPending}
+      onPress={() => toggleLesson(lesson.id)}
+      style={styles.bookmark}
+    >
+      {bookmarkPending ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : (
+        <Bookmark
+          color={bookmarked ? colors.primary : colors.textPrimary}
+          fill={bookmarked ? colors.primary : 'transparent'}
+          size={24}
+          strokeWidth={2.2}
+        />
+      )}
+    </Pressable>
+  );
+
   return (
     <Screen edges={['top', 'bottom']}>
-      <ScreenHeader />
+      <ScreenHeader right={bookmarkButton} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.titleBlock}>
@@ -152,20 +195,39 @@ export default function LessonDetailScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button
-          title="Sebelumnya"
-          variant="outline"
-          disabled={!previous}
-          style={styles.footerButton}
-          onPress={() => previous && router.replace(`/lesson/${previous.id}`)}
-        />
-        <Button
-          title={next ? 'Selanjutnya' : 'Kembali ke Fase'}
-          style={styles.footerButton}
-          onPress={() =>
-            next ? router.replace(`/lesson/${next.id}`) : router.replace(`/phase/${phase.id}`)
-          }
-        />
+        {completed ? (
+          <Button
+            title="Tandai Belum Selesai"
+            variant="outline"
+            loading={saving}
+            onPress={() => reopenLesson(lesson.id)}
+          />
+        ) : (
+          <Button
+            title="Tandai Selesai"
+            loading={saving}
+            disabled={progress.isLoading}
+            onPress={() => completeLesson(lesson.id, phase.id)}
+          />
+        )}
+
+        <View style={styles.footerRow}>
+          <Button
+            title="Sebelumnya"
+            variant="outline"
+            disabled={!previous}
+            style={styles.footerButton}
+            onPress={() => previous && router.replace(`/lesson/${previous.id}`)}
+          />
+          <Button
+            title={next ? 'Selanjutnya' : 'Kembali ke Fase'}
+            variant="outline"
+            style={styles.footerButton}
+            onPress={() =>
+              next ? router.replace(`/lesson/${next.id}`) : router.replace(`/phase/${phase.id}`)
+            }
+          />
+        </View>
       </View>
     </Screen>
   );
@@ -182,6 +244,12 @@ const styles = StyleSheet.create({
   },
   block: {
     gap: spacing.md,
+  },
+  bookmark: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardTitle: {
     flexDirection: 'row',
@@ -213,7 +281,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   footer: {
-    flexDirection: 'row',
     gap: spacing.md,
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.md,
@@ -221,6 +288,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.background,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
   },
   footerButton: {
     flex: 1,

@@ -10,37 +10,48 @@ import {
 
 import { db } from '@/services/firebase/config';
 
-const bookmarkDocId = (resourceId: string) => `resource_${resourceId}`;
+export type BookmarkKind = 'resource' | 'lesson';
 
-export function subscribeToResourceBookmarks(
+export interface BookmarkSnapshot {
+  resourceIds: string[];
+  lessonIds: string[];
+}
+
+const bookmarkDocId = (kind: BookmarkKind, targetId: string) => `${kind}_${targetId}`;
+
+export function subscribeToBookmarks(
   uid: string,
-  onChange: (resourceIds: string[]) => void,
+  onChange: (bookmarks: BookmarkSnapshot) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
     collection(db, 'users', uid, 'bookmarks'),
     (snapshot) => {
-      const ids: string[] = [];
+      const result: BookmarkSnapshot = { resourceIds: [], lessonIds: [] };
       snapshot.forEach((item) => {
         const data = item.data();
-        if (data.kind === 'resource' && typeof data.targetId === 'string') {
-          ids.push(data.targetId);
-        }
+        if (typeof data.targetId !== 'string') return;
+        if (data.kind === 'resource') result.resourceIds.push(data.targetId);
+        if (data.kind === 'lesson') result.lessonIds.push(data.targetId);
       });
-      onChange(ids);
+      onChange(result);
     },
     onError,
   );
 }
 
-export async function addResourceBookmark(uid: string, resourceId: string): Promise<void> {
-  await setDoc(doc(db, 'users', uid, 'bookmarks', bookmarkDocId(resourceId)), {
-    kind: 'resource',
-    targetId: resourceId,
+export async function addBookmark(uid: string, kind: BookmarkKind, targetId: string): Promise<void> {
+  await setDoc(doc(db, 'users', uid, 'bookmarks', bookmarkDocId(kind, targetId)), {
+    kind,
+    targetId,
     createdAt: serverTimestamp(),
   });
 }
 
-export async function removeResourceBookmark(uid: string, resourceId: string): Promise<void> {
-  await deleteDoc(doc(db, 'users', uid, 'bookmarks', bookmarkDocId(resourceId)));
+export async function removeBookmark(
+  uid: string,
+  kind: BookmarkKind,
+  targetId: string,
+): Promise<void> {
+  await deleteDoc(doc(db, 'users', uid, 'bookmarks', bookmarkDocId(kind, targetId)));
 }

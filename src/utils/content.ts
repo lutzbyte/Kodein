@@ -76,5 +76,9 @@ export function getExerciseKindLabel(kind: ExerciseKind): string {
       return 'Benar / Salah';
     case 'predict-output':
       return 'Prediksi Output';
+    case 'debugging':
+      return 'Debugging';
+    case 'problem-solving':
+      return 'Problem Solving';
   }
 }
