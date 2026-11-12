@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
-import { Bookmark } from 'lucide-react-native';
+import { Bookmark, X } from 'lucide-react-native';
 import { useMemo } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { LessonRow } from '@/components/cards/LessonRow';
 import { ResourceCard } from '@/components/cards/ResourceCard';
@@ -14,6 +14,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { colors, layout, spacing } from '@/constants/theme';
 import { resources } from '@/data/resources';
 import { useBookmarks } from '@/hooks/useBookmarks';
+import { useDialog } from '@/hooks/useDialog';
 import { useOpenResource } from '@/hooks/useOpenResource';
 import { useProgress } from '@/hooks/useProgress';
 import { findLesson } from '@/utils/content';
@@ -21,9 +22,19 @@ import { getLessonStatus } from '@/utils/progress';
 
 export default function BookmarksScreen() {
   const router = useRouter();
+  const dialog = useDialog();
   const openResource = useOpenResource();
   const progress = useProgress();
-  const { resourceIds, lessonIds, isLoading, error } = useBookmarks();
+  const {
+    resourceIds,
+    lessonIds,
+    isLoading,
+    isClearing,
+    error,
+    isLessonPending,
+    toggleLesson,
+    clearAll,
+  } = useBookmarks();
 
   const savedResources = useMemo(
     () => resources.filter((resource) => resourceIds.has(resource.id)),
@@ -40,9 +51,37 @@ export default function BookmarksScreen() {
 
   const isEmpty = savedLessons.length === 0 && savedResources.length === 0;
 
+  const confirmClear = async () => {
+    const confirmed = await dialog.confirm({
+      title: 'Hapus semua bookmark?',
+      message: 'Semua materi dan resource yang kamu simpan akan dihapus dari daftar ini.',
+      confirmLabel: 'Hapus semua',
+      cancelLabel: 'Batal',
+      tone: 'danger',
+    });
+    if (confirmed) await clearAll();
+  };
+
+  const clearButton = !isEmpty ? (
+    <Pressable
+      accessibilityRole="button"
+      hitSlop={10}
+      disabled={isClearing}
+      onPress={confirmClear}
+    >
+      {isClearing ? (
+        <ActivityIndicator size="small" color={colors.danger} />
+      ) : (
+        <AppText variant="bodyStrong" color={colors.danger}>
+          Hapus semua
+        </AppText>
+      )}
+    </Pressable>
+  ) : undefined;
+
   return (
     <Screen edges={['top', 'bottom']}>
-      <ScreenHeader />
+      <ScreenHeader right={clearButton} />
 
       {isLoading ? (
         <View style={styles.center}>
@@ -71,13 +110,30 @@ export default function BookmarksScreen() {
               <AppText variant="heading">Materi</AppText>
               <Card padded={false}>
                 {savedLessons.map(({ lesson }, index) => (
-                  <LessonRow
-                    key={lesson.id}
-                    title={lesson.title}
-                    status={getLessonStatus(progress, lesson.id)}
-                    isLast={index === savedLessons.length - 1}
-                    onPress={() => router.push(`/lesson/${lesson.id}`)}
-                  />
+                  <View key={lesson.id} style={styles.lessonRow}>
+                    <View style={styles.lessonMain}>
+                      <LessonRow
+                        title={lesson.title}
+                        status={getLessonStatus(progress, lesson.id)}
+                        isLast={index === savedLessons.length - 1}
+                        onPress={() => router.push(`/lesson/${lesson.id}`)}
+                      />
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Hapus bookmark ${lesson.title}`}
+                      hitSlop={8}
+                      disabled={isLessonPending(lesson.id)}
+                      onPress={() => toggleLesson(lesson.id)}
+                      style={styles.remove}
+                    >
+                      {isLessonPending(lesson.id) ? (
+                        <ActivityIndicator size="small" color={colors.textMuted} />
+                      ) : (
+                        <X color={colors.textMuted} size={18} strokeWidth={2.2} />
+                      )}
+                    </Pressable>
+                  </View>
                 ))}
               </Card>
             </View>
@@ -119,5 +175,18 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: spacing.md,
+  },
+  lessonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  lessonMain: {
+    flex: 1,
+  },
+  remove: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -2,6 +2,7 @@ import { SlidersHorizontal } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { NativeAdCard } from '@/components/ads/NativeAdCard';
 import { ResourceCard } from '@/components/cards/ResourceCard';
 import { ResourceFilterSheet } from '@/components/sheets/ResourceFilterSheet';
 import { AppText } from '@/components/ui/AppText';
@@ -11,8 +12,10 @@ import { SearchInput } from '@/components/ui/SearchInput';
 import { colors, layout, radius, spacing } from '@/constants/theme';
 import { phases } from '@/data/phases';
 import { resources } from '@/data/resources';
+import { useAds } from '@/hooks/useAds';
 import { useOpenResource } from '@/hooks/useOpenResource';
 import { useProgress } from '@/hooks/useProgress';
+import type { Resource } from '@/types/content';
 import { findLesson } from '@/utils/content';
 import {
   DEFAULT_RESOURCE_FILTERS,
@@ -26,9 +29,17 @@ import {
 
 const TYPE_FILTERS: TypeFilter[] = ['Semua', 'YouTube', 'Artikel', 'Dokumentasi', 'Buku', 'Kursus'];
 
+/** Satu iklan native disisipkan setiap sekian resource. */
+const AD_EVERY = 5;
+
+type ListItem =
+  | { kind: 'resource'; key: string; resource: Resource }
+  | { kind: 'ad'; key: string };
+
 export default function ResourcesScreen() {
   const openResource = useOpenResource();
   const progress = useProgress();
+  const { ready: adsReady } = useAds();
   const [filters, setFilters] = useState<ResourceFilters>(DEFAULT_RESOURCE_FILTERS);
   const [filterVisible, setFilterVisible] = useState(false);
 
@@ -46,6 +57,17 @@ export default function ResourcesScreen() {
   );
 
   const showRecommendations = !hasActiveFilters(filters) && recommended.length > 0;
+
+  const items = useMemo<ListItem[]>(() => {
+    const list: ListItem[] = [];
+    filtered.forEach((resource, index) => {
+      list.push({ kind: 'resource', key: resource.id, resource });
+      if (adsReady && (index + 1) % AD_EVERY === 0 && index + 1 < filtered.length) {
+        list.push({ kind: 'ad', key: `ad-${index}` });
+      }
+    });
+    return list;
+  }, [filtered, adsReady]);
 
   const header = (
     <View style={styles.header}>
@@ -121,8 +143,8 @@ export default function ResourcesScreen() {
   return (
     <Screen edges={['top']}>
       <FlatList
-        data={filtered}
-        keyExtractor={(resource) => resource.id}
+        data={items}
+        keyExtractor={(item) => item.key}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
@@ -135,7 +157,13 @@ export default function ResourcesScreen() {
               : 'Tidak ada resource yang cocok dengan pencarian atau filter ini.'}
           </AppText>
         }
-        renderItem={({ item }) => <ResourceCard resource={item} onPress={() => openResource(item)} />}
+        renderItem={({ item }) =>
+          item.kind === 'ad' ? (
+            <NativeAdCard />
+          ) : (
+            <ResourceCard resource={item.resource} onPress={() => openResource(item.resource)} />
+          )
+        }
       />
 
       <ResourceFilterSheet

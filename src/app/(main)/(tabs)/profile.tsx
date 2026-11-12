@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Bookmark, History, Info, Settings, Star } from 'lucide-react-native';
+import { Bookmark, History, Info, Settings, Star, Wrench } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -13,26 +13,56 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Screen } from '@/components/ui/Screen';
 import { colors, layout, radius, spacing } from '@/constants/theme';
 import { phases } from '@/data/phases';
+import { projects } from '@/data/projects';
 import { useAuth } from '@/hooks/useAuth';
 import { useDialog } from '@/hooks/useDialog';
+import { useExerciseResults } from '@/hooks/useExerciseResults';
 import { useProgress } from '@/hooks/useProgress';
+import { useProjectProgress } from '@/hooks/useProjectProgress';
 import { toAuthError } from '@/services/auth/authErrors';
 import { getAndroidPackage } from '@/utils/appInfo';
 import { getLearnerLevel } from '@/utils/level';
 import { getOverallProgress } from '@/utils/progress';
+import { isProjectDone } from '@/utils/projects';
 
 const ICON_COLOR = colors.textPrimary;
+
+function Stat({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={styles.stat}>
+      <AppText variant="title" color={colors.primary}>
+        {value}
+      </AppText>
+      <AppText variant="caption" color={colors.textSecondary} align="center">
+        {label}
+      </AppText>
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
   const dialog = useDialog();
   const { user, signOut } = useAuth();
   const progress = useProgress();
+  const { results } = useExerciseResults();
+  const { records } = useProjectProgress();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [aboutVisible, setAboutVisible] = useState(false);
 
   const overall = useMemo(() => getOverallProgress(phases, progress), [progress]);
   const level = getLearnerLevel(overall);
+
+  const solvedExercises = useMemo(
+    () => Array.from(results.values()).filter((result) => result.solved).length,
+    [results],
+  );
+  const doneProjects = useMemo(
+    () =>
+      projects.filter((project) => isProjectDone(records.get(project.id), project.checklist.length))
+        .length,
+    [records],
+  );
 
   const confirmSignOut = useCallback(async () => {
     const confirmed = await dialog.confirm({
@@ -110,11 +140,22 @@ export default function ProfileScreen() {
           <ProgressBar value={overall.percent} color={colors.primary} trackColor={colors.surface} height={8} />
         </View>
 
+        <View style={styles.stats}>
+          <Stat value={progress.completedLessonIds.size} label="Materi selesai" />
+          <Stat value={solvedExercises} label="Latihan selesai" />
+          <Stat value={doneProjects} label="Proyek selesai" />
+        </View>
+
         <View>
           <MenuRow
             icon={<History color={ICON_COLOR} size={22} strokeWidth={2} />}
             label="Riwayat Belajar"
             onPress={() => router.push('/history')}
+          />
+          <MenuRow
+            icon={<Wrench color={ICON_COLOR} size={22} strokeWidth={2} />}
+            label="Proyek"
+            onPress={() => router.push('/project')}
           />
           <MenuRow
             icon={<Bookmark color={ICON_COLOR} size={22} strokeWidth={2} />}
@@ -172,5 +213,17 @@ const styles = StyleSheet.create({
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  stats: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    gap: 2,
   },
 });

@@ -3,7 +3,7 @@
     "name": "Kodein",
     "slug": "kodein",
     "scheme": "kodein",
-    "version": "1.0.0-beta.1",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
@@ -28,7 +28,14 @@
           "backgroundColor": "#0B0B24"
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-9758137856347788~2550919286",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ]
     ]
   }
 }

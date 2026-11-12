@@ -5,6 +5,7 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
+  writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
 
@@ -15,6 +16,11 @@ export type BookmarkKind = 'resource' | 'lesson';
 export interface BookmarkSnapshot {
   resourceIds: string[];
   lessonIds: string[];
+}
+
+export interface BookmarkEntry {
+  kind: BookmarkKind;
+  targetId: string;
 }
 
 const bookmarkDocId = (kind: BookmarkKind, targetId: string) => `${kind}_${targetId}`;
@@ -54,4 +60,14 @@ export async function removeBookmark(
   targetId: string,
 ): Promise<void> {
   await deleteDoc(doc(db, 'users', uid, 'bookmarks', bookmarkDocId(kind, targetId)));
+}
+
+export async function removeAllBookmarks(uid: string, entries: BookmarkEntry[]): Promise<void> {
+  for (let start = 0; start < entries.length; start += 400) {
+    const batch = writeBatch(db);
+    for (const entry of entries.slice(start, start + 400)) {
+      batch.delete(doc(db, 'users', uid, 'bookmarks', bookmarkDocId(entry.kind, entry.targetId)));
+    }
+    await batch.commit();
+  }
 }

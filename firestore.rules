@@ -93,9 +93,21 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // Diperketat pada Fase 7.
       match /projectProgress/{projectId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(
+            ['projectId', 'phaseId', 'completedItems', 'total', 'updatedAt']
+          )
+          && request.resource.data.projectId == projectId
+          && request.resource.data.phaseId is string
+          && request.resource.data.total is int
+          && request.resource.data.total >= 1
+          && request.resource.data.total <= 20
+          && request.resource.data.completedItems is list
+          && request.resource.data.completedItems.size() <= request.resource.data.total
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if false;
       }
     }
 

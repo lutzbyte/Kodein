@@ -1,17 +1,19 @@
 import { useLocalSearchParams } from 'expo-router';
-import { Circle, CircleCheck, Search } from 'lucide-react-native';
-import { useState } from 'react';
+import { Circle, CircleCheck, PartyPopper, Search } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { Badge, getDifficultyTone } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Screen } from '@/components/ui/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { colors, layout, spacing } from '@/constants/theme';
+import { colors, layout, radius, spacing } from '@/constants/theme';
+import { useProjectProgress } from '@/hooks/useProjectProgress';
 import { getProjectById } from '@/utils/content';
+import { getProjectPercent, isProjectDone } from '@/utils/projects';
 
 function BulletList({ items }: { items: string[] }) {
   return (
@@ -30,7 +32,7 @@ function BulletList({ items }: { items: string[] }) {
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [checkedItems, setCheckedItems] = useState<number[]>([]);
+  const { records, error, isLoading, isPending, toggleItem } = useProjectProgress();
 
   const project = getProjectById(id);
 
@@ -47,13 +49,12 @@ export default function ProjectDetailScreen() {
     );
   }
 
-  const percent = Math.round((checkedItems.length / project.checklist.length) * 100);
-
-  const toggle = (index: number) => {
-    setCheckedItems((previous) =>
-      previous.includes(index) ? previous.filter((item) => item !== index) : [...previous, index],
-    );
-  };
+  const record = records.get(project.id);
+  const total = project.checklist.length;
+  const percent = getProjectPercent(record, total);
+  const done = isProjectDone(record, total);
+  const saving = isPending(project.id);
+  const checked = new Set(record?.completedItems ?? []);
 
   return (
     <Screen edges={['top', 'bottom']}>
@@ -61,12 +62,17 @@ export default function ProjectDetailScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.titleBlock}>
-          <Badge label={project.difficulty} tone={getDifficultyTone(project.difficulty)} />
+          <View style={styles.badges}>
+            <Badge label={project.difficulty} tone={getDifficultyTone(project.difficulty)} />
+            {done ? <Badge label="Selesai" tone="success" /> : null}
+          </View>
           <AppText variant="title">{project.title}</AppText>
           <AppText variant="body" color={colors.textSecondary}>
             {project.description}
           </AppText>
         </View>
+
+        {error ? <ErrorBanner message={error} /> : null}
 
         <View style={styles.block}>
           <AppText variant="heading">Tujuan</AppText>
@@ -90,30 +96,45 @@ export default function ProjectDetailScreen() {
         <View style={styles.block}>
           <View style={styles.checklistHeader}>
             <AppText variant="heading">Checklist</AppText>
-            <AppText variant="bodyStrong" color={colors.primary}>
+            <AppText variant="bodyStrong" color={done ? colors.success : colors.primary}>
               {percent}%
             </AppText>
           </View>
-          <ProgressBar value={percent} height={8} />
+          <ProgressBar value={percent} color={done ? colors.success : colors.primary} height={8} />
+
+          {done ? (
+            <View style={styles.doneCard}>
+              <PartyPopper color={colors.success} size={22} strokeWidth={2.2} />
+              <AppText variant="bodyStrong" color="#15803D" style={styles.doneText}>
+                Proyek selesai! Semua langkah sudah kamu kerjakan.
+              </AppText>
+            </View>
+          ) : null}
+
           <Card padded={false}>
             {project.checklist.map((item, index) => {
-              const done = checkedItems.includes(index);
+              const itemDone = checked.has(index);
               return (
                 <Pressable
                   key={index}
                   accessibilityRole="checkbox"
-                  accessibilityState={{ checked: done }}
-                  onPress={() => toggle(index)}
-                  style={[styles.checkRow, index < project.checklist.length - 1 && styles.checkDivider]}
+                  accessibilityState={{ checked: itemDone, disabled: saving || isLoading }}
+                  disabled={saving || isLoading}
+                  onPress={() => toggleItem(project, index)}
+                  style={[
+                    styles.checkRow,
+                    index < total - 1 && styles.checkDivider,
+                    (saving || isLoading) && styles.checkDisabled,
+                  ]}
                 >
-                  {done ? (
+                  {itemDone ? (
                     <CircleCheck color={colors.success} size={22} strokeWidth={2.2} />
                   ) : (
                     <Circle color={colors.disabled} size={22} strokeWidth={2} />
                   )}
                   <AppText
                     variant="body"
-                    color={done ? colors.textSecondary : colors.textPrimary}
+                    color={itemDone ? colors.textSecondary : colors.textPrimary}
                     style={styles.checkLabel}
                   >
                     {item}
@@ -135,6 +156,10 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
   titleBlock: {
+    gap: spacing.sm,
+  },
+  badges: {
+    flexDirection: 'row',
     gap: spacing.sm,
   },
   block: {
@@ -167,6 +192,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  doneCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.successSoft,
+  },
+  doneText: {
+    flex: 1,
+  },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -177,6 +213,9 @@ const styles = StyleSheet.create({
   checkDivider: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  checkDisabled: {
+    opacity: 0.6,
   },
   checkLabel: {
     flex: 1,

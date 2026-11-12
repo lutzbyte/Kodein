@@ -2,8 +2,9 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 
-import { MountainIllustration } from '@/components/illustrations/MountainIllustration';
+import { AdBanner } from '@/components/ads/AdBanner';
 import { PhaseCard } from '@/components/cards/PhaseCard';
+import { MountainIllustration } from '@/components/illustrations/MountainIllustration';
 import { AppText } from '@/components/ui/AppText';
 import { Chip } from '@/components/ui/Chip';
 import { Screen } from '@/components/ui/Screen';
@@ -66,6 +67,7 @@ export default function RoadmapScreen() {
               ))}
             </ScrollView>
           }
+          ListFooterComponent={<AdBanner />}
           ListEmptyComponent={
             <AppText variant="body" color={colors.textSecondary} align="center">
               Belum ada fase untuk level ini.
