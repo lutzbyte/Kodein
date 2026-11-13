@@ -10,7 +10,6 @@
     "platforms": ["android"],
     "android": {
       "package": "com.kodein.app",
-      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#0B0B24"
@@ -34,6 +33,14 @@
         {
           "androidAppId": "ca-app-pub-9758137856347788~2550919286",
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-keep class androidx.work.** { *; }\n-keep class androidx.room.** { *; }\n-keep class * extends androidx.room.RoomDatabase\n-dontwarn androidx.work.**"
+          }
         }
       ]
     ]
